@@ -141,7 +141,7 @@ export default function FileComponent({file}: FileComponentProps) {
                     className="w-5"
                 />
             </div>
-            <div className="text-sm text-gray-200">{file.filename}</div>
+            <div className="text-sm text-gray-200 truncate w-40 overflow-hidden">{file.filename}</div>
             </div>
             <div className="relative" ref={dropdownRef}>
             <button 

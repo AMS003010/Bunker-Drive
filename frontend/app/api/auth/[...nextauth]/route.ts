@@ -17,7 +17,6 @@ const handler = NextAuth({
             email: user.email,
             name: user.name,
           });
-
           token.backendJWT = res.data.token;
           token.userId = res.data.userId;
         } catch (err) {

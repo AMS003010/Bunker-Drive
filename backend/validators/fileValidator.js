@@ -16,7 +16,7 @@ const searchJoiSchema = Joi.object({
 const fileJoiSchema = Joi.object({
     filename: Joi.string().required(),
     key: Joi.string().required(),
-    url: Joi.string().uri().required(),
+    url: Joi.string().required(),
     createdAt: { type: Date, default: Date.now },
 })
 

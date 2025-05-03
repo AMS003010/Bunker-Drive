@@ -28,11 +28,14 @@ const generateUploadURL = async (req, res) => {
 
     const url = await getSignedUrl(s3, command, { expiresIn: 3600 });
 
+    console.log({"=============> generate upload url": { uploadUrl: url, key }})
+
     res.json({ uploadUrl: url, key });
 }
 
 const saveMetadata = async (req, res) => {
     console.log("saveMetadata");
+    console.log({"=============> save meta data (BEFORE)": req.body })
     const { error } = fileJoiSchema.validate(req.body);
     if (error) return res.status(400).json({error: error.details[0].message});
 
@@ -42,6 +45,7 @@ const saveMetadata = async (req, res) => {
     if (existingFile) return res.status(400).json({error: "File already exists"})
     const file = new File({...req.body, userId: userId});
     await file.save();
+    console.log({"=============> save meta data (AFTER)": file})
     res.status(201).json(file);
 }
 
@@ -109,7 +113,7 @@ const renameFile = async (req, res) => {
     const { newFilename } = value;
 
     try {
-        const file = await File.findOne({ _id: key });
+        const file = await File.findOne({ _id: key });        
         if (!file) {
             return res.status(404).json({ error: 'File not found' });
         }

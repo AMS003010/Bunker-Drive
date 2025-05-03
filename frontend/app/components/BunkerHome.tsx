@@ -97,76 +97,115 @@ export default function BunkerHome () {
         uploadFile(selectedFile);
     };
 
-    // Modify the uploadFile function to handle CORS properly
-const uploadFile = async (file: File) => {
-    const backend_jwt = session?.backendJWT;
-    const user_id = session?.userId;
-    
-    setIsUploading(true);
-    setUploadProgress(0);
-    setUploadError('');
-    
-    try {
-      // Step 1: Get upload URL
-      const contentType = getContentType(file.name);
-      const uploadUrlResponse = await axios.post(
-        `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/files/upload-url`,
-        {
-          filename: file.name,
-          contentType: contentType
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${backend_jwt}`,
-            'x-user-id': user_id,
-          }
+    const uploadFile = async (file: File) => {
+        const backend_jwt = session?.backendJWT;
+        const user_id = session?.userId;
+        
+        setIsUploading(true);
+        setUploadProgress(0);
+        setUploadError('');
+        
+        try {
+            const contentType = getContentType(file.name);
+            const uploadUrlResponse = await axios.post(
+                `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/files/upload-url`,
+                {
+                    filename: file.name,
+                    contentType: contentType
+                },
+                {
+                    headers: {
+                        Authorization: `Bearer ${backend_jwt}`,
+                        'x-user-id': user_id,
+                    }
+                }
+            );
+          
+            const { uploadUrl, key } = uploadUrlResponse.data;
+          
+            return new Promise((resolve, reject) => {
+                const xhr = new XMLHttpRequest();
+                xhr.open('PUT', uploadUrl);
+                xhr.setRequestHeader('Content-Type', contentType);
+                
+                xhr.upload.onprogress = (event) => {
+                if (event.lengthComputable) {
+                    const progress = Math.round((event.loaded / event.total) * 100);
+                    setUploadProgress(progress);
+                }
+                };
+                
+                xhr.onload = async () => {
+                    if (xhr.status >= 200 && xhr.status < 300) {
+                        try {
+                            if (data!=null) {
+                                const existingFile = data.find((item) => item.filename === file.name);
+        
+                                if (existingFile) {
+                                    toast.error("File already exists. Please rename your file or delete the existing one.");
+                                    setUploadError('File already exists. Please rename your file or delete the existing one.');
+                                    setIsUploading(false);
+                                    return;
+                                }
+                            }
+                        
+                            const metadataResponse = await axios.post(
+                                `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/files/save-metadata`,
+                                {
+                                    filename: file.name,
+                                    key: key,
+                                    url: `https://bunker-drive-storage.s3.amazonaws.com/${key}`
+                                },
+                                {
+                                    headers: {
+                                        Authorization: `Bearer ${backend_jwt}`,
+                                        'x-user-id': user_id,
+                                    }
+                                }
+                            );
+
+                            if (metadataResponse.data && metadataResponse.data.error === 'File already exists') {
+                                    toast.error("File already exists. Please rename your file or delete the existing one.");
+                                    setUploadError('File already exists. Please rename your file or delete the existing one.');
+                                    setIsUploading(false);
+                                return;
+                            }
+                        
+                            setIsUploading(false);
+                                setUploadProgress(100);
+                            
+                            refreshFiles();
+                            
+                            toast.success("File uploaded successfully!");
+                            resolve(true);
+                        } catch (err) {
+                            console.error("Metadata save failed:", err);
+                            setUploadError('Failed to save file metadata. Please try again.');
+                            setIsUploading(false);
+                            reject(err);
+                        }
+                    } else {
+                        setUploadError(`Upload failed with status: ${xhr.status}`);
+                        setIsUploading(false);
+                        reject(new Error(`Upload failed with status: ${xhr.status}`));
+                    }
+                };
+                
+                xhr.onerror = () => {
+                    setUploadError('Network error during upload');
+                    setIsUploading(false);
+                    reject(new Error('Network error during upload'));
+                };
+                
+                xhr.send(file);
+            });
+        } catch (err) {
+            console.error("Upload preparation failed:", err);
+            setUploadError('Failed to prepare upload. Please try again.');
+            setIsUploading(false);
+            throw err;
         }
-      );
-      
-      const { uploadUrl, key } = uploadUrlResponse.data;
-      
-      // Step 2: Upload file to the URL using fetch instead of axios
-      // This avoids CORS preflight issues with S3
-      const upload = await fetch(uploadUrl, {
-        method: 'PUT',
-        body: file,
-        headers: {
-          'Content-Type': contentType
-        }
-      });
-      
-      if (!upload.ok) {
-        throw new Error(`Upload failed with status: ${upload.status}`);
-      }
-      
-      // Step 3: Save metadata
-      await axios.post(
-        `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/files/save-metadata`,
-        {
-          filename: file.name,
-          key: key,
-          url: `https://bunker-drive-storage.s3.amazonaws.com/${key}`
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${backend_jwt}`,
-            'x-user-id': user_id,
-          }
-        }
-      );
-      
-      // Reset states and close modal
-      setIsUploading(false);
-      setUploadProgress(100);
-      
-      // Trigger refresh of files list here based on your app architecture
-      
-    } catch (err) {
-      console.error("Upload failed:", err);
-      setUploadError('Failed to upload file. Please try again.');
-      setIsUploading(false);
-    }
-  };
+    };
 
     const uploadButton = (
         <button
@@ -181,41 +220,70 @@ const uploadFile = async (file: File) => {
     const signOutButton = (
         <button
             onClick={() => signOut()}
-          className="flex items-center px-4 py-2 bg-red-600 text-white rounded hover:bg-red-500"
+            className="flex items-center px-4 py-2 bg-red-600 text-white rounded hover:bg-red-500"
         >
-          <LogOut size={16} className="mr-2" />
-          Sign Out
+            <LogOut size={16} className="mr-2" />
+            Sign Out
         </button>
     );
       
     const fileInput = (
         <input
-          type="file"
-          ref={fileInputRef}
-          onChange={handleFileSelect}
-          accept=".pdf,.png,.docx"
-          style={{ display: 'none' }}
+            type="file"
+            ref={fileInputRef}
+            onChange={handleFileSelect}
+            accept=".pdf,.png,.docx"
+            style={{ display: 'none' }}
         />
     );
+
+    const refreshFiles = async () => {
+        try {
+            const res = await axios.post(
+                `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/files/search`,
+                { query: `${query}` },
+                {
+                    headers: {
+                        Authorization: `Bearer ${session?.backendJWT}`,
+                        'x-user-id': session?.userId,
+                    },
+                }
+            );
+          setData(res.data.results);
+        } catch (err) {
+            console.error("Error refreshing files:", err);
+            toast.error("Failed to refresh file list");
+        }
+    };
       
     const uploadModal = (
-    <>
-        {isUploading && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-20">
-            <div className="bg-zinc-800 p-6 rounded-lg w-96">
-            <h3 className="text-lg font-medium text-white mb-4">Uploading File</h3>
-            <div className="w-full bg-zinc-700 rounded-full h-2.5 mb-4">
-                <div 
-                className="bg-blue-600 h-2.5 rounded-full" 
-                style={{ width: `${uploadProgress}%` }}
-                ></div>
-            </div>
-            <p className="text-gray-300 text-sm">{uploadProgress}% Complete</p>
-            {uploadError && <p className="text-red-500 text-sm mt-3">{uploadError}</p>}
-            </div>
-        </div>
-        )}
-    </>
+        <>
+            {isUploading && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-20">
+                <div className="bg-zinc-800 p-6 rounded-lg w-96">
+                    <h3 className="text-lg font-medium text-white mb-4">Uploading {fileInputRef.current?.files?.[0]?.name}</h3>
+                    <div className="w-full bg-zinc-700 rounded-full h-2.5 mb-4">
+                    <div 
+                        className="bg-blue-600 h-2.5 rounded-full transition-all duration-300" 
+                        style={{ width: `${uploadProgress}%` }}
+                    ></div>
+                    </div>
+                    <p className="text-gray-300 text-sm mb-4">{uploadProgress}% Complete</p>
+                    {uploadError && <p className="text-red-500 text-sm mt-3 mb-3">{uploadError}</p>}
+                    <button 
+                        onClick={() => {
+                            setIsUploading(false);
+                            setUploadProgress(0);
+                            setUploadError('');
+                        }}
+                        className="px-4 py-2 bg-zinc-600 text-white rounded hover:bg-zinc-500"
+                    >
+                    Cancel
+                    </button>
+                </div>
+                </div>
+            )}
+        </>
     );
 
     return(
